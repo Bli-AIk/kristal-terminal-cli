@@ -1,0 +1,11 @@
+{
+    "id": "terminal-cli",
+    "version": "v0.1.0",
+    "engineVer": "v0.10.0",
+    "authors": ["Bli_AIk"],
+    "config": {
+        "enabled": true,
+        "only_dev": true,
+        "max_commands_per_frame": 8
+    }
+}
