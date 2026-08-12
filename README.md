@@ -46,15 +46,9 @@ git submodule update --init --recursive
 
 ## 行编辑
 
-终端保持默认的 canonical 模式，只支持最基本的退格功能：方向键、历史记录等编辑功能都不可用——按下方向键时，`ESC[A` 这类转义序列会被当成普通字符输进命令行。
+内置分栏式终端控制台（TUI）：游戏输出显示在上方滚动区，输入行固定在底部，互不干扰。支持方向键移动光标、Home/End/Delete、↑↓ 历史记录、Ctrl+C 取消当前行、Ctrl+D 退出（空行时）、中文（UTF-8）输入。历史保存在 LÖVE 存档目录的 `terminal-cli-history.txt`。
 
-想要 readline 式的编辑体验，Linux 下用 [rlwrap](https://github.com/hanslub42/rlwrap) 包一层启动命令即可：
-
-```sh
-rlwrap just run
-```
-
-这样在 `kristal> ` 提示符下输入命令时，方向键和历史记录就都能用了。注意 rlwrap 仅限 Unix，Windows 上不可用。
+需要从真实终端（tty）启动；stdin 为管道/重定向时自动降级为逐行输入（仅退格）。
 
 ## 许可证
 

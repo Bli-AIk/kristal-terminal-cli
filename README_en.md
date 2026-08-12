@@ -53,19 +53,15 @@ and exits with `unsupported_platform` on Windows.
 
 ## Line Editing
 
-The terminal stays in canonical mode: only basic backspace is available, and
-arrow keys / history are not handled — arrow keys arrive as raw escape
-sequences and get typed into the command line.
+A split-view terminal console (TUI) is built in: game output scrolls in the
+upper region, and the input line stays fixed at the bottom. Arrow keys move
+the cursor, Home/End/Delete edit, ↑/↓ browse history, Ctrl+C cancels the
+current line, Ctrl+D exits (on an empty line), and Chinese (UTF-8) input
+works. History is persisted to `terminal-cli-history.txt` in the LÖVE save
+directory.
 
-For a readline-style experience on Linux, wrap the launch command with
-[rlwrap](https://github.com/hanslub42/rlwrap):
-
-```sh
-rlwrap just run
-```
-
-This gives you arrow keys and history at the `kristal> ` prompt. Note that
-rlwrap is Unix-only and not available on Windows.
+A real terminal (tty) is required; when stdin is a pipe or redirect, the
+library falls back to plain line-by-line input (backspace only).
 
 ## License
 

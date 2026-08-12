@@ -3,6 +3,9 @@ local lib = {}
 local LIB_ID = "terminal-cli"
 local INPUT_SCRIPT = "scripts/input.lua"
 local PROMPT = "kristal> "
+local SCROLLBACK_MAX = 500
+local HISTORY_MAX = 200
+local HISTORY_FILE = "terminal-cli-history.txt"
 
 local function config(key)
     return Kristal.getLibConfig(LIB_ID, key)
@@ -47,7 +50,8 @@ function lib:write_line(text)
 end
 
 function lib:write_prompt()
-    if self.running then
+    -- In raw (TUI) mode the input line is drawn by render().
+    if self.running and not self.raw_mode then
         self:write_raw(PROMPT)
     end
 end
@@ -56,7 +60,30 @@ function lib:write_console_text(text)
     if text == nil then
         return
     end
-    self:write_line(text)
+    self:append_output(text)
+end
+
+local function split_lines(text)
+    local lines = {}
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+        table.insert(lines, (line:gsub("\r$", "")))
+    end
+    return lines
+end
+
+function lib:append_output(text)
+    text = strip_console_modifiers(text)
+    if self.raw_mode then
+        for _, line in ipairs(split_lines(text)) do
+            table.insert(self.scrollback, line)
+        end
+        while #self.scrollback > SCROLLBACK_MAX do
+            table.remove(self.scrollback, 1)
+        end
+        self.dirty = true
+    else
+        self:write_line(text)
+    end
 end
 
 function lib:install_console_hooks()
@@ -66,6 +93,19 @@ function lib:install_console_hooks()
 
     self.hooks_installed = true
     local owner = self
+
+    -- Route engine output (print) into the console instead of raw stdout;
+    -- otherwise it clobbers the TUI input line and gets erased by redraws.
+    if not self.print_hooked then
+        self.print_hooked = true
+        _G.print = function(...)
+            local parts = {}
+            for i = 1, select("#", ...) do
+                parts[i] = tostring((select(i, ...)))
+            end
+            owner:append_output(table.concat(parts, "\t"))
+        end
+    end
 
     HookSystem.hook(Console, "push", function(orig, console, text)
         local result = orig(console, text)
@@ -161,6 +201,13 @@ function lib:start()
     self.thread = thread_or_error
     self.running = true
     self.input_closed = false
+    self.raw_mode = false
+    self.scrollback = {}
+    self.history = {}
+    self.buffer = ""
+    self.cursor = 0
+    self.startup_banner = "\n[terminal-cli] Interactive debug console attached.\n"
+        .. "[terminal-cli] Lua commands run in the game's main thread.\n"
 
     local start_ok, start_error = pcall(
         self.thread.start,
@@ -175,10 +222,6 @@ function lib:start()
         print("[WARNING] terminal-cli could not start input thread: " .. tostring(start_error))
         return false
     end
-
-    self:write_raw("\n[terminal-cli] Interactive debug console attached.\n")
-    self:write_raw("[terminal-cli] Lua commands run in the game's main thread.\n")
-    self:write_prompt()
     return true
 end
 
@@ -197,6 +240,225 @@ function lib:stop()
     self.thread = nil
     self.input_channel = nil
     self.control_channel = nil
+end
+
+-- ===== TUI editor =====
+
+function lib:char_len_at(c)
+    local b = self.buffer
+    if c < 1 or c > #b then
+        return 0
+    end
+    local byte = b:byte(c)
+    if byte < 0x80 then
+        return 1
+    elseif byte >= 0xF0 then
+        return 4
+    elseif byte >= 0xE0 then
+        return 3
+    elseif byte >= 0xC0 then
+        return 2
+    end
+    return 1
+end
+
+function lib:char_end_before(c)
+    -- start byte of the character whose last byte is at c; 0 if none
+    if c <= 0 then
+        return 0
+    end
+    local b = self.buffer
+    local i = c
+    while i > 0 do
+        local byte = b:byte(i)
+        if byte < 0x80 or byte >= 0xC0 then
+            return i
+        end
+        i = i - 1
+    end
+    return 0
+end
+
+function lib:cursor_column()
+    local col = 0
+    local i = 1
+    while i <= self.cursor do
+        local len = self:char_len_at(i)
+        col = col + (len == 1 and 1 or 2) -- CJK chars count as width 2
+        i = i + len
+    end
+    return col
+end
+
+function lib:history_load()
+    local content = love.filesystem.read(HISTORY_FILE)
+    if content then
+        for line in content:gmatch("[^\r\n]+") do
+            table.insert(self.history, line)
+        end
+    end
+    self.history_pos = nil
+end
+
+function lib:history_up()
+    if #self.history == 0 then
+        return
+    end
+    if self.history_pos == nil then
+        self.history_pos = #self.history
+    elseif self.history_pos > 1 then
+        self.history_pos = self.history_pos - 1
+    end
+    self.buffer = self.history[self.history_pos] or ""
+    self.cursor = #self.buffer
+end
+
+function lib:history_down()
+    if self.history_pos == nil then
+        return
+    end
+    if self.history_pos < #self.history then
+        self.history_pos = self.history_pos + 1
+        self.buffer = self.history[self.history_pos] or ""
+    else
+        self.history_pos = nil
+        self.buffer = ""
+    end
+    self.cursor = #self.buffer
+end
+
+function lib:commit_line()
+    local text = self.buffer
+    self.buffer = ""
+    self.cursor = 0
+    self.history_pos = nil
+
+    if text ~= "" then
+        table.insert(self.scrollback, PROMPT .. text)
+        table.insert(self.history, text)
+        while #self.history > HISTORY_MAX do
+            table.remove(self.history, 1)
+        end
+        love.filesystem.write(HISTORY_FILE, table.concat(self.history, "\n") .. "\n")
+
+        self._remote_depth = (self._remote_depth or 0) + 1
+        local ok, err = pcall(function()
+            Kristal.Console:run({ text })
+        end)
+        self._remote_depth = self._remote_depth - 1
+        if not ok then
+            if Kristal.Console then
+                Kristal.Console:error(tostring(err))
+            else
+                print("[ERROR] " .. tostring(err))
+            end
+        end
+    end
+    self.dirty = true
+end
+
+function lib:handle_key(value)
+    local b = self.buffer
+    local c = self.cursor
+
+    if value == "left" then
+        c = self:char_end_before(c - 1)
+    elseif value == "right" then
+        c = c + self:char_len_at(c + 1)
+    elseif value == "backspace" then
+        local s = self:char_end_before(c)
+        if s > 0 then
+            b = b:sub(1, s - 1) .. b:sub(c + 1)
+            c = s - 1
+        end
+    elseif value == "delete" then
+        local len = self:char_len_at(c + 1)
+        if len > 0 then
+            b = b:sub(1, c) .. b:sub(c + 1 + len)
+        end
+    elseif value == "home" then
+        c = 0
+    elseif value == "end" then
+        c = #b
+    elseif value == "up" then
+        self:history_up()
+        b = self.buffer
+        c = self.cursor
+    elseif value == "down" then
+        self:history_down()
+        b = self.buffer
+        c = self.cursor
+    elseif value == "ctrl_c" then
+        b = ""
+        c = 0
+        self.history_pos = nil
+    elseif value == "ctrl_d" then
+        if #b == 0 then
+            self:append_output("[terminal-cli] stdin eof.")
+            self:stop()
+            return
+        end
+        local len = self:char_len_at(c + 1)
+        if len > 0 then
+            b = b:sub(1, c) .. b:sub(c + 1 + len)
+        end
+    elseif value == "enter" then
+        self:commit_line()
+        return
+    elseif value == "tab" then
+        -- completion not implemented
+    else
+        b = b:sub(1, c) .. value .. b:sub(c + 1)
+        c = c + #value
+    end
+
+    self.buffer = b
+    self.cursor = c
+    self.dirty = true
+end
+
+function lib:terminal_rows()
+    local ok, ffi = pcall(require, "ffi")
+    if not ok then
+        return nil
+    end
+    if not self._ws_ffi then
+        ffi.cdef[[
+            struct winsize {
+                unsigned short ws_row;
+                unsigned short ws_col;
+                unsigned short ws_xpixel;
+                unsigned short ws_ypixel;
+            };
+            int ioctl(int fd, unsigned long request, void *arg);
+        ]]
+        self._ws_ffi = ffi
+        self._ws_tiocgwinsz = (ffi.os == "Linux") and 0x5413 or 0x40087468
+    end
+    local ws = self._ws_ffi.new("struct winsize")
+    if self._ws_ffi.C.ioctl(1, self._ws_tiocgwinsz, ws) == 0 then
+        local rows = ws.ws_row
+        if rows > 0 then
+            return rows
+        end
+    end
+    return nil
+end
+
+function lib:render()
+    if not self.raw_mode then
+        return
+    end
+    local rows = self:terminal_rows() or 24
+    local parts = { "\27[2J\27[H" }
+    local start = math.max(1, #self.scrollback - rows + 3)
+    for i = start, #self.scrollback do
+        parts[#parts + 1] = self.scrollback[i]
+        parts[#parts + 1] = "\r\n"
+    end
+    parts[#parts + 1] = "\27[" .. rows .. ";1H" .. "\r\27[K" .. PROMPT .. self.buffer
+    parts[#parts + 1] = "\27[" .. (self:cursor_column() + #PROMPT + 1) .. "G"
+    self:write_raw(table.concat(parts))
 end
 
 function lib:process_input()
@@ -227,13 +489,29 @@ function lib:process_input()
                     end
                     self:write_prompt()
                 end
+            elseif message.kind == "key" then
+                self:handle_key(message.value)
+            elseif message.kind == "raw" then
+                self.raw_mode = true
+                self:history_load()
+                self:append_output(self.startup_banner)
+                self.dirty = true
+            elseif message.kind == "plain" then
+                self.raw_mode = false
+                self:write_line(self.startup_banner)
+                self:write_prompt()
             elseif message.kind == "status" then
                 self.input_closed = true
-                self:write_line("[terminal-cli] stdin " .. tostring(message.value) .. ".")
+                self:append_output("[terminal-cli] stdin " .. tostring(message.value) .. ".")
                 self:stop()
                 break
             end
         end
+    end
+
+    if self.dirty and self.raw_mode then
+        self:render()
+        self.dirty = false
     end
 end
 
