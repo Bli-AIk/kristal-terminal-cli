@@ -1,14 +1,32 @@
 # Kristal terminal-cli
 
-[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE)
+[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/kristal-terminal-cli.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/kristal-terminal-cli.svg"/> <img src="https://img.shields.io/github/v/release/Bli-AIk/kristal-terminal-cli.svg"/> <br>
+<img src="https://img.shields.io/badge/Deltarune-001225?style=for-the-badge&labelColor=001225&logo=undertale&logoColor=ff0000" /> <img src="https://img.shields.io/badge/Lua-2C2D72?style=for-the-badge&logo=lua&logoColor=white" /> <img src="https://img.shields.io/badge/Kristal-FF6B35?style=for-the-badge&logo=love2d&logoColor=white" />
 
 | English | 简体中文                |
 | ------- | ----------------------- |
 | English | [简体中文](./README.md) |
 
+## Kristal Version Support
+
+| `kristal`                                                                                                      | `kristal-terminal-cli` |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`) | 0.1.0                  |
+
 An optional Kristal v0.10.0 development library designed for **Linux** (and
 other POSIX) terminals, which attaches the game's debug console to the current
 process stdin/stdout.
+
+## Install
+
+Install it as a submodule (recommended — keeps the library versioned alongside your mod):
+
+```sh
+git submodule add https://github.com/Bli-AIk/kristal-terminal-cli.git libraries/terminal-cli
+git submodule update --init --recursive
+```
+
+Alternatively, download the [release source](https://github.com/Bli-AIk/kristal-terminal-cli/releases), or clone the latest code (rolling updates), and place it in `libraries/terminal-cli`.
 
 ## How to Use
 

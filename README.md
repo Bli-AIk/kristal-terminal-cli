@@ -1,12 +1,30 @@
 # Kristal terminal-cli
 
-[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE)
+[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/kristal-terminal-cli.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/kristal-terminal-cli.svg"/> <img src="https://img.shields.io/github/v/release/Bli-AIk/kristal-terminal-cli.svg"/> <br>
+<img src="https://img.shields.io/badge/Deltarune-001225?style=for-the-badge&labelColor=001225&logo=undertale&logoColor=ff0000" /> <img src="https://img.shields.io/badge/Lua-2C2D72?style=for-the-badge&logo=lua&logoColor=white" /> <img src="https://img.shields.io/badge/Kristal-FF6B35?style=for-the-badge&logo=love2d&logoColor=white" />
 
 | 简体中文 | English                   |
 | -------- | ------------------------- |
 | 简体中文 | [English](./README_en.md) |
 
+## Kristal 版本支持
+
+| `kristal`                                                                                                      | `kristal-terminal-cli` |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`) | 0.1.0                  |
+
 一个为 **Linux**（及其他 POSIX）终端设计的可选 Kristal v0.10.0 开发库，把游戏内的调试控制台挂到当前进程的 stdin/stdout 上。
+
+## 安装
+
+以子模块方式安装（建议，便于跟随版本更新）：
+
+```sh
+git submodule add https://github.com/Bli-AIk/kristal-terminal-cli.git libraries/terminal-cli
+git submodule update --init --recursive
+```
+
+也可以直接下载 [Release 源码](https://github.com/Bli-AIk/kristal-terminal-cli/releases)，或克隆仓库最新代码（滚动更新）后放入 `libraries/terminal-cli`。
 
 ## 使用方法
 
