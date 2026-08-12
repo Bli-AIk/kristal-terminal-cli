@@ -1,6 +1,6 @@
 {
     "id": "terminal-cli",
-    "version": "v0.1.0",
+    "version": "v0.1.0", // x-release-please-version
     "engineVer": "v0.10.0",
     "authors": ["Bli_AIk"],
     "config": {
