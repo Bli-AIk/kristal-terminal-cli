@@ -7,6 +7,10 @@ local SCROLLBACK_MAX = 500
 local HISTORY_MAX = 200
 local HISTORY_FILE = "terminal-cli-history.txt"
 
+lib.PROMPT = PROMPT
+lib.HISTORY_MAX = HISTORY_MAX
+lib.HISTORY_FILE = HISTORY_FILE
+
 local function config(key)
     return Kristal.getLibConfig(LIB_ID, key)
 end
@@ -86,6 +90,13 @@ function lib:append_output(text)
     end
 end
 
+function lib:clear_screen()
+    if self.raw_mode then
+        self.scrollback = {}
+        self.dirty = true
+    end
+end
+
 function lib:install_console_hooks()
     if self.hooks_installed or not Console then
         return
@@ -103,7 +114,25 @@ function lib:install_console_hooks()
             for i = 1, select("#", ...) do
                 parts[i] = tostring((select(i, ...)))
             end
-            owner:append_output(table.concat(parts, "\t"))
+            local text = table.concat(parts, "\t")
+            if owner._in_error_scope then
+                text = "\27[38;5;210m" .. text .. "\27[0m"
+            end
+            owner:append_output(text)
+        end
+    end
+
+    -- clear() in the console env should also clear the terminal scrollback.
+    -- Kristal.Console is the instance (Console is the class); the env lives on the instance.
+    if not self.clear_hooked then
+        local console_env = Kristal.Console and Kristal.Console.env
+        if console_env and console_env.clear then
+            self.clear_hooked = true
+            local orig_clear = console_env.clear
+            console_env.clear = function()
+                orig_clear()
+                owner:clear_screen()
+            end
         end
     end
 
@@ -127,9 +156,14 @@ function lib:install_console_hooks()
         return result
     end)
 
-    local function hook_logged_method(orig, console, text)
+    local function hook_logged_method(orig, console, text, is_error)
         local previous = owner._suppress_push
         owner._suppress_push = true
+        -- Keep the flag through the current message batch: the raw error
+        -- print in Console:run fires right after Console:error returns.
+        if is_error then
+            owner._in_error_scope = true
+        end
         local ok, result = pcall(orig, console, text)
         owner._suppress_push = previous
 
@@ -141,7 +175,9 @@ function lib:install_console_hooks()
 
     HookSystem.hook(Console, "log", hook_logged_method)
     HookSystem.hook(Console, "warn", hook_logged_method)
-    HookSystem.hook(Console, "error", hook_logged_method)
+    HookSystem.hook(Console, "error", function(orig, console, text)
+        return hook_logged_method(orig, console, text, true)
+    end)
 
     HookSystem.hook(Console, "run", function(orig, console, lines)
         local previous_capture = owner._capture_run
@@ -242,225 +278,6 @@ function lib:stop()
     self.control_channel = nil
 end
 
--- ===== TUI editor =====
-
-function lib:char_len_at(c)
-    local b = self.buffer
-    if c < 1 or c > #b then
-        return 0
-    end
-    local byte = b:byte(c)
-    if byte < 0x80 then
-        return 1
-    elseif byte >= 0xF0 then
-        return 4
-    elseif byte >= 0xE0 then
-        return 3
-    elseif byte >= 0xC0 then
-        return 2
-    end
-    return 1
-end
-
-function lib:char_end_before(c)
-    -- start byte of the character whose last byte is at c; 0 if none
-    if c <= 0 then
-        return 0
-    end
-    local b = self.buffer
-    local i = c
-    while i > 0 do
-        local byte = b:byte(i)
-        if byte < 0x80 or byte >= 0xC0 then
-            return i
-        end
-        i = i - 1
-    end
-    return 0
-end
-
-function lib:cursor_column()
-    local col = 0
-    local i = 1
-    while i <= self.cursor do
-        local len = self:char_len_at(i)
-        col = col + (len == 1 and 1 or 2) -- CJK chars count as width 2
-        i = i + len
-    end
-    return col
-end
-
-function lib:history_load()
-    local content = love.filesystem.read(HISTORY_FILE)
-    if content then
-        for line in content:gmatch("[^\r\n]+") do
-            table.insert(self.history, line)
-        end
-    end
-    self.history_pos = nil
-end
-
-function lib:history_up()
-    if #self.history == 0 then
-        return
-    end
-    if self.history_pos == nil then
-        self.history_pos = #self.history
-    elseif self.history_pos > 1 then
-        self.history_pos = self.history_pos - 1
-    end
-    self.buffer = self.history[self.history_pos] or ""
-    self.cursor = #self.buffer
-end
-
-function lib:history_down()
-    if self.history_pos == nil then
-        return
-    end
-    if self.history_pos < #self.history then
-        self.history_pos = self.history_pos + 1
-        self.buffer = self.history[self.history_pos] or ""
-    else
-        self.history_pos = nil
-        self.buffer = ""
-    end
-    self.cursor = #self.buffer
-end
-
-function lib:commit_line()
-    local text = self.buffer
-    self.buffer = ""
-    self.cursor = 0
-    self.history_pos = nil
-
-    if text ~= "" then
-        table.insert(self.scrollback, PROMPT .. text)
-        table.insert(self.history, text)
-        while #self.history > HISTORY_MAX do
-            table.remove(self.history, 1)
-        end
-        love.filesystem.write(HISTORY_FILE, table.concat(self.history, "\n") .. "\n")
-
-        self._remote_depth = (self._remote_depth or 0) + 1
-        local ok, err = pcall(function()
-            Kristal.Console:run({ text })
-        end)
-        self._remote_depth = self._remote_depth - 1
-        if not ok then
-            if Kristal.Console then
-                Kristal.Console:error(tostring(err))
-            else
-                print("[ERROR] " .. tostring(err))
-            end
-        end
-    end
-    self.dirty = true
-end
-
-function lib:handle_key(value)
-    local b = self.buffer
-    local c = self.cursor
-
-    if value == "left" then
-        c = self:char_end_before(c - 1)
-    elseif value == "right" then
-        c = c + self:char_len_at(c + 1)
-    elseif value == "backspace" then
-        local s = self:char_end_before(c)
-        if s > 0 then
-            b = b:sub(1, s - 1) .. b:sub(c + 1)
-            c = s - 1
-        end
-    elseif value == "delete" then
-        local len = self:char_len_at(c + 1)
-        if len > 0 then
-            b = b:sub(1, c) .. b:sub(c + 1 + len)
-        end
-    elseif value == "home" then
-        c = 0
-    elseif value == "end" then
-        c = #b
-    elseif value == "up" then
-        self:history_up()
-        b = self.buffer
-        c = self.cursor
-    elseif value == "down" then
-        self:history_down()
-        b = self.buffer
-        c = self.cursor
-    elseif value == "ctrl_c" then
-        b = ""
-        c = 0
-        self.history_pos = nil
-    elseif value == "ctrl_d" then
-        if #b == 0 then
-            self:append_output("[terminal-cli] stdin eof.")
-            self:stop()
-            return
-        end
-        local len = self:char_len_at(c + 1)
-        if len > 0 then
-            b = b:sub(1, c) .. b:sub(c + 1 + len)
-        end
-    elseif value == "enter" then
-        self:commit_line()
-        return
-    elseif value == "tab" then
-        -- completion not implemented
-    else
-        b = b:sub(1, c) .. value .. b:sub(c + 1)
-        c = c + #value
-    end
-
-    self.buffer = b
-    self.cursor = c
-    self.dirty = true
-end
-
-function lib:terminal_rows()
-    local ok, ffi = pcall(require, "ffi")
-    if not ok then
-        return nil
-    end
-    if not self._ws_ffi then
-        ffi.cdef[[
-            struct winsize {
-                unsigned short ws_row;
-                unsigned short ws_col;
-                unsigned short ws_xpixel;
-                unsigned short ws_ypixel;
-            };
-            int ioctl(int fd, unsigned long request, void *arg);
-        ]]
-        self._ws_ffi = ffi
-        self._ws_tiocgwinsz = (ffi.os == "Linux") and 0x5413 or 0x40087468
-    end
-    local ws = self._ws_ffi.new("struct winsize")
-    if self._ws_ffi.C.ioctl(1, self._ws_tiocgwinsz, ws) == 0 then
-        local rows = ws.ws_row
-        if rows > 0 then
-            return rows
-        end
-    end
-    return nil
-end
-
-function lib:render()
-    if not self.raw_mode then
-        return
-    end
-    local rows = self:terminal_rows() or 24
-    local parts = { "\27[2J\27[H" }
-    local start = math.max(1, #self.scrollback - rows + 3)
-    for i = start, #self.scrollback do
-        parts[#parts + 1] = self.scrollback[i]
-        parts[#parts + 1] = "\r\n"
-    end
-    parts[#parts + 1] = "\27[" .. rows .. ";1H" .. "\r\27[K" .. PROMPT .. self.buffer
-    parts[#parts + 1] = "\27[" .. (self:cursor_column() + #PROMPT + 1) .. "G"
-    self:write_raw(table.concat(parts))
-end
-
 function lib:process_input()
     if not self.running or not self.input_channel then
         return
@@ -493,9 +310,15 @@ function lib:process_input()
                 self:handle_key(message.value)
             elseif message.kind == "raw" then
                 self.raw_mode = true
-                self:history_load()
-                self:append_output(self.startup_banner)
-                self.dirty = true
+                if not self:enable_windows_vt() then
+                    self.raw_mode = false
+                    self:append_output("[terminal-cli] VT sequences unavailable; use Windows Terminal or Win10+ conhost.")
+                    self:stop()
+                else
+                    self:history_load()
+                    self:append_output(self.startup_banner)
+                    self.dirty = true
+                end
             elseif message.kind == "plain" then
                 self.raw_mode = false
                 self:write_line(self.startup_banner)
@@ -513,6 +336,7 @@ function lib:process_input()
         self:render()
         self.dirty = false
     end
+    self._in_error_scope = false
 end
 
 function lib:init()
@@ -529,6 +353,15 @@ function lib:init()
     if not io or not io.stdin or not io.stdout then
         print("[WARNING] terminal-cli requires standard input and output")
         return
+    end
+
+    -- Load sub-modules (single responsibility per file).
+    for _, name in ipairs({ "highlight", "editor", "tui" }) do
+        local chunk, err = love.filesystem.load(self.info.path .. "/" .. name .. ".lua")
+        if not chunk then
+            error("[terminal-cli] cannot load module " .. name .. ": " .. tostring(err))
+        end
+        chunk()(self)
     end
 
     self:install_console_hooks()

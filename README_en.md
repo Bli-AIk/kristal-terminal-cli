@@ -47,18 +47,20 @@ not available.
 
 ## Platform Support
 
-This library is designed primarily for **Linux** (and other POSIX) terminals.
-**Windows is not supported** — the stdin reader relies on POSIX `poll(2)`/`read(2)`
-and exits with `unsupported_platform` on Windows.
+This library is designed primarily for **Linux** (and other POSIX) terminals,
+and also supports **Windows** (launch with `lovec.exe` or from a terminal,
+using Windows Terminal or a Win10+ conhost).
 
 ## Line Editing
 
 A split-view terminal console (TUI) is built in: game output scrolls in the
 upper region, and the input line stays fixed at the bottom. Arrow keys move
 the cursor, Home/End/Delete edit, ↑/↓ browse history, Ctrl+C cancels the
-current line, Ctrl+D exits (on an empty line), and Chinese (UTF-8) input
-works. History is persisted to `terminal-cli-history.txt` in the LÖVE save
-directory.
+current line, Ctrl+D exits (on an empty line), `clear()` clears the screen,
+and Chinese (UTF-8) input works. The input line and commands in the history
+are highlighted with basic Lua syntax colors (keywords/strings/comments/
+numbers); unrecognized commands and their error output are shown in pale red.
+History is persisted to `terminal-cli-history.txt` in the LÖVE save directory.
 
 A real terminal (tty) is required; when stdin is a pipe or redirect, the
 library falls back to plain line-by-line input (backspace only).

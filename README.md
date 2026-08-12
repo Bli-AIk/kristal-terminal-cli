@@ -42,11 +42,11 @@ git submodule update --init --recursive
 
 ## 平台支持
 
-本库主要面向 **Linux**（及其他 POSIX）终端设计。**不支持 Windows**——stdin 读取依赖 POSIX 的 `poll(2)`/`read(2)`，在 Windows 上会以 `unsupported_platform` 退出。
+本库主要面向 **Linux**（及其他 POSIX）终端设计，同时支持 **Windows**（用 `lovec.exe` 或从终端启动，需 Windows Terminal 或 Win10+ conhost）。
 
 ## 行编辑
 
-内置分栏式终端控制台（TUI）：游戏输出显示在上方滚动区，输入行固定在底部，互不干扰。支持方向键移动光标、Home/End/Delete、↑↓ 历史记录、Ctrl+C 取消当前行、Ctrl+D 退出（空行时）、中文（UTF-8）输入。历史保存在 LÖVE 存档目录的 `terminal-cli-history.txt`。
+内置分栏式终端控制台（TUI）：游戏输出显示在上方滚动区，输入行固定在底部，互不干扰。支持方向键移动光标、Home/End/Delete、↑↓ 历史记录、Ctrl+C 取消当前行、Ctrl+D 退出（空行时）、`clear()` 清屏、中文（UTF-8）输入。输入行和历史记录中的命令带基础 Lua 语法高亮（关键字/字符串/注释/数字）；命令无法识别时，命令和错误输出以淡红色显示。历史保存在 LÖVE 存档目录的 `terminal-cli-history.txt`。
 
 需要从真实终端（tty）启动；stdin 为管道/重定向时自动降级为逐行输入（仅退格）。
 
