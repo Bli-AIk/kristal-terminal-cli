@@ -3,6 +3,13 @@ local lib = {}
 local LIB_ID = "terminal-cli"
 local INPUT_SCRIPT = "scripts/input.lua"
 local PROMPT = "kristal> "
+local SCROLLBACK_MAX = 500
+local HISTORY_MAX = 200
+local HISTORY_FILE = "terminal-cli-history.txt"
+
+lib.PROMPT = PROMPT
+lib.HISTORY_MAX = HISTORY_MAX
+lib.HISTORY_FILE = HISTORY_FILE
 
 local function config(key)
     return Kristal.getLibConfig(LIB_ID, key)
@@ -47,7 +54,8 @@ function lib:write_line(text)
 end
 
 function lib:write_prompt()
-    if self.running then
+    -- In raw (TUI) mode the input line is drawn by render().
+    if self.running and not self.raw_mode then
         self:write_raw(PROMPT)
     end
 end
@@ -56,7 +64,37 @@ function lib:write_console_text(text)
     if text == nil then
         return
     end
-    self:write_line(text)
+    self:append_output(text)
+end
+
+local function split_lines(text)
+    local lines = {}
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+        table.insert(lines, (line:gsub("\r$", "")))
+    end
+    return lines
+end
+
+function lib:append_output(text)
+    text = strip_console_modifiers(text)
+    if self.raw_mode then
+        for _, line in ipairs(split_lines(text)) do
+            table.insert(self.scrollback, line)
+        end
+        while #self.scrollback > SCROLLBACK_MAX do
+            table.remove(self.scrollback, 1)
+        end
+        self.dirty = true
+    else
+        self:write_line(text)
+    end
+end
+
+function lib:clear_screen()
+    if self.raw_mode then
+        self.scrollback = {}
+        self.dirty = true
+    end
 end
 
 function lib:install_console_hooks()
@@ -66,6 +104,37 @@ function lib:install_console_hooks()
 
     self.hooks_installed = true
     local owner = self
+
+    -- Route engine output (print) into the console instead of raw stdout;
+    -- otherwise it clobbers the TUI input line and gets erased by redraws.
+    if not self.print_hooked then
+        self.print_hooked = true
+        _G.print = function(...)
+            local parts = {}
+            for i = 1, select("#", ...) do
+                parts[i] = tostring((select(i, ...)))
+            end
+            local text = table.concat(parts, "\t")
+            if owner._in_error_scope then
+                text = "\27[38;5;210m" .. text .. "\27[0m"
+            end
+            owner:append_output(text)
+        end
+    end
+
+    -- clear() in the console env should also clear the terminal scrollback.
+    -- Kristal.Console is the instance (Console is the class); the env lives on the instance.
+    if not self.clear_hooked then
+        local console_env = Kristal.Console and Kristal.Console.env
+        if console_env and console_env.clear then
+            self.clear_hooked = true
+            local orig_clear = console_env.clear
+            console_env.clear = function()
+                orig_clear()
+                owner:clear_screen()
+            end
+        end
+    end
 
     HookSystem.hook(Console, "push", function(orig, console, text)
         local result = orig(console, text)
@@ -87,9 +156,14 @@ function lib:install_console_hooks()
         return result
     end)
 
-    local function hook_logged_method(orig, console, text)
+    local function hook_logged_method(orig, console, text, is_error)
         local previous = owner._suppress_push
         owner._suppress_push = true
+        -- Keep the flag through the current message batch: the raw error
+        -- print in Console:run fires right after Console:error returns.
+        if is_error then
+            owner._in_error_scope = true
+        end
         local ok, result = pcall(orig, console, text)
         owner._suppress_push = previous
 
@@ -101,7 +175,9 @@ function lib:install_console_hooks()
 
     HookSystem.hook(Console, "log", hook_logged_method)
     HookSystem.hook(Console, "warn", hook_logged_method)
-    HookSystem.hook(Console, "error", hook_logged_method)
+    HookSystem.hook(Console, "error", function(orig, console, text)
+        return hook_logged_method(orig, console, text, true)
+    end)
 
     HookSystem.hook(Console, "run", function(orig, console, lines)
         local previous_capture = owner._capture_run
@@ -161,6 +237,13 @@ function lib:start()
     self.thread = thread_or_error
     self.running = true
     self.input_closed = false
+    self.raw_mode = false
+    self.scrollback = {}
+    self.history = {}
+    self.buffer = ""
+    self.cursor = 0
+    self.startup_banner = "\n[terminal-cli] Interactive debug console attached.\n"
+        .. "[terminal-cli] Lua commands run in the game's main thread.\n"
 
     local start_ok, start_error = pcall(
         self.thread.start,
@@ -175,10 +258,6 @@ function lib:start()
         print("[WARNING] terminal-cli could not start input thread: " .. tostring(start_error))
         return false
     end
-
-    self:write_raw("\n[terminal-cli] Interactive debug console attached.\n")
-    self:write_raw("[terminal-cli] Lua commands run in the game's main thread.\n")
-    self:write_prompt()
     return true
 end
 
@@ -227,14 +306,37 @@ function lib:process_input()
                     end
                     self:write_prompt()
                 end
+            elseif message.kind == "key" then
+                self:handle_key(message.value)
+            elseif message.kind == "raw" then
+                self.raw_mode = true
+                if not self:enable_windows_vt() then
+                    self.raw_mode = false
+                    self:append_output("[terminal-cli] VT sequences unavailable; use Windows Terminal or Win10+ conhost.")
+                    self:stop()
+                else
+                    self:history_load()
+                    self:append_output(self.startup_banner)
+                    self.dirty = true
+                end
+            elseif message.kind == "plain" then
+                self.raw_mode = false
+                self:write_line(self.startup_banner)
+                self:write_prompt()
             elseif message.kind == "status" then
                 self.input_closed = true
-                self:write_line("[terminal-cli] stdin " .. tostring(message.value) .. ".")
+                self:append_output("[terminal-cli] stdin " .. tostring(message.value) .. ".")
                 self:stop()
                 break
             end
         end
     end
+
+    if self.dirty and self.raw_mode then
+        self:render()
+        self.dirty = false
+    end
+    self._in_error_scope = false
 end
 
 function lib:init()
@@ -251,6 +353,15 @@ function lib:init()
     if not io or not io.stdin or not io.stdout then
         print("[WARNING] terminal-cli requires standard input and output")
         return
+    end
+
+    -- Load sub-modules (single responsibility per file).
+    for _, name in ipairs({ "highlight", "editor", "tui" }) do
+        local chunk, err = love.filesystem.load(self.info.path .. "/" .. name .. ".lua")
+        if not chunk then
+            error("[terminal-cli] cannot load module " .. name .. ": " .. tostring(err))
+        end
+        chunk()(self)
     end
 
     self:install_console_hooks()
