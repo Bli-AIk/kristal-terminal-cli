@@ -29,6 +29,38 @@ return function(lib)
         if not ok then
             return nil
         end
+        if ffi.os == "Windows" then
+            -- console window height via GetConsoleScreenBufferInfo
+            local ok2, rows = pcall(function()
+                ffi.cdef[[
+                    typedef void *HANDLE;
+                    typedef unsigned long DWORD;
+                    typedef short SHORT;
+                    typedef struct _COORD { SHORT X; SHORT Y; } COORD;
+                    typedef struct _SMALL_RECT { SHORT Left; SHORT Top; SHORT Right; SHORT Bottom; } SMALL_RECT;
+                    typedef struct _CONSOLE_SCREEN_BUFFER_INFO {
+                        COORD dwSize;
+                        COORD dwCursorPosition;
+                        SHORT wAttributes;
+                        SMALL_RECT srWindow;
+                        COORD dwMaximumWindowSize;
+                    } CONSOLE_SCREEN_BUFFER_INFO;
+                    HANDLE GetStdHandle(int nStdHandle);
+                    int GetConsoleScreenBufferInfo(HANDLE hConsoleOutput, CONSOLE_SCREEN_BUFFER_INFO *lpConsoleScreenBufferInfo);
+                ]]
+                local h = ffi.C.GetStdHandle(-11) -- STD_OUTPUT_HANDLE
+                local info = ffi.new("CONSOLE_SCREEN_BUFFER_INFO")
+                if ffi.C.GetConsoleScreenBufferInfo(h, info) == 0 then
+                    return nil
+                end
+                local rows = info.srWindow.Bottom - info.srWindow.Top + 1
+                if rows > 0 then
+                    return rows
+                end
+                return nil
+            end)
+            return ok2 and rows or nil
+        end
         if not self._ws_ffi then
             ffi.cdef[[
                 struct winsize {

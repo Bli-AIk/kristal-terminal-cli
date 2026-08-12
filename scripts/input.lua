@@ -65,7 +65,7 @@ if ffi.os == "Windows" then
             end
             return nil
         end
-        if c == 13 then return "enter"
+        if c == 13 or c == 10 then return "enter" -- wine delivers \n for Enter
         elseif c == 3 then return "ctrl_c"
         elseif c == 4 then return "ctrl_d"
         elseif c == 8 then return "backspace"
@@ -201,7 +201,7 @@ end
 
 local function handle_byte(b)
     if utf8_need > 0 then
-        if (b & 0xC0) == 0x80 then
+        if bit.band(b, 0xC0) == 0x80 then
             utf8_buf = utf8_buf .. string.char(b)
             utf8_need = utf8_need - 1
             if utf8_need == 0 then
