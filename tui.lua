@@ -1,12 +1,17 @@
 -- TUI rendering: split-view layout, terminal size, Windows VT setup.
 
-return function(lib)
-    function lib:enable_windows_vt()
-        local ok, ffi = pcall(require, "ffi")
-        if not ok or ffi.os ~= "Windows" then
-            return true
-        end
-        local ok2, result = pcall(function()
+-- LuaJIT's ffi.cdef refuses to redeclare types ("attempt to redefine
+-- 'winsize'"). Kristal hot reload (Ctrl+R) re-runs this file in the same
+-- Lua state, so keep a process-wide marker and register each C declaration
+-- block only once.
+local CDEFS_DONE_KEY = "__terminal_cli_tui_ffi_cdefs_done"
+
+local function ensure_cdefs(ffi)
+    if _G[CDEFS_DONE_KEY] then
+        return
+    end
+    local ok, err = pcall(function()
+        if ffi.os == "Windows" then
             ffi.cdef[[
                 typedef void *HANDLE;
                 typedef unsigned long DWORD;
@@ -14,6 +19,49 @@ return function(lib)
                 int GetConsoleMode(HANDLE hConsoleHandle, DWORD *lpMode);
                 int SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
             ]]
+            ffi.cdef[[
+                typedef void *HANDLE;
+                typedef unsigned long DWORD;
+                typedef short SHORT;
+                typedef struct _COORD { SHORT X; SHORT Y; } COORD;
+                typedef struct _SMALL_RECT { SHORT Left; SHORT Top; SHORT Right; SHORT Bottom; } SMALL_RECT;
+                typedef struct _CONSOLE_SCREEN_BUFFER_INFO {
+                    COORD dwSize;
+                    COORD dwCursorPosition;
+                    SHORT wAttributes;
+                    SMALL_RECT srWindow;
+                    COORD dwMaximumWindowSize;
+                } CONSOLE_SCREEN_BUFFER_INFO;
+                HANDLE GetStdHandle(int nStdHandle);
+                int GetConsoleScreenBufferInfo(HANDLE hConsoleOutput, CONSOLE_SCREEN_BUFFER_INFO *lpConsoleScreenBufferInfo);
+            ]]
+        else
+            ffi.cdef[[
+                struct winsize {
+                    unsigned short ws_row;
+                    unsigned short ws_col;
+                    unsigned short ws_xpixel;
+                    unsigned short ws_ypixel;
+                };
+                int ioctl(int fd, unsigned long request, void *arg);
+            ]]
+        end
+    end)
+    if ok or (err and tostring(err):find("redefine", 1, true)) then
+        _G[CDEFS_DONE_KEY] = true
+        return
+    end
+    error(err, 0)
+end
+
+return function(lib)
+    function lib:enable_windows_vt()
+        local ok, ffi = pcall(require, "ffi")
+        if not ok or ffi.os ~= "Windows" then
+            return true
+        end
+        local ok2, result = pcall(function()
+            ensure_cdefs(ffi)
             local h = ffi.C.GetStdHandle(-11) -- STD_OUTPUT_HANDLE
             local mode = ffi.new("unsigned long[1]")
             if ffi.C.GetConsoleMode(h, mode) == 0 then
@@ -32,22 +80,7 @@ return function(lib)
         if ffi.os == "Windows" then
             -- console window height via GetConsoleScreenBufferInfo
             local ok2, rows = pcall(function()
-                ffi.cdef[[
-                    typedef void *HANDLE;
-                    typedef unsigned long DWORD;
-                    typedef short SHORT;
-                    typedef struct _COORD { SHORT X; SHORT Y; } COORD;
-                    typedef struct _SMALL_RECT { SHORT Left; SHORT Top; SHORT Right; SHORT Bottom; } SMALL_RECT;
-                    typedef struct _CONSOLE_SCREEN_BUFFER_INFO {
-                        COORD dwSize;
-                        COORD dwCursorPosition;
-                        SHORT wAttributes;
-                        SMALL_RECT srWindow;
-                        COORD dwMaximumWindowSize;
-                    } CONSOLE_SCREEN_BUFFER_INFO;
-                    HANDLE GetStdHandle(int nStdHandle);
-                    int GetConsoleScreenBufferInfo(HANDLE hConsoleOutput, CONSOLE_SCREEN_BUFFER_INFO *lpConsoleScreenBufferInfo);
-                ]]
+                ensure_cdefs(ffi)
                 local h = ffi.C.GetStdHandle(-11) -- STD_OUTPUT_HANDLE
                 local info = ffi.new("CONSOLE_SCREEN_BUFFER_INFO")
                 if ffi.C.GetConsoleScreenBufferInfo(h, info) == 0 then
@@ -61,16 +94,8 @@ return function(lib)
             end)
             return ok2 and rows or nil
         end
+        ensure_cdefs(ffi)
         if not self._ws_ffi then
-            ffi.cdef[[
-                struct winsize {
-                    unsigned short ws_row;
-                    unsigned short ws_col;
-                    unsigned short ws_xpixel;
-                    unsigned short ws_ypixel;
-                };
-                int ioctl(int fd, unsigned long request, void *arg);
-            ]]
             self._ws_ffi = ffi
             self._ws_tiocgwinsz = (ffi.os == "Linux") and 0x5413 or 0x40087468
         end
