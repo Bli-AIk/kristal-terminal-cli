@@ -285,6 +285,11 @@ function lib:process_input()
 
     local limit = self.max_commands_per_frame
     for _ = 1, limit do
+        -- handle_key / the raw branch may call self:stop() mid-loop, which
+        -- nils input_channel; bail out instead of indexing nil below.
+        if not self.running or not self.input_channel then
+            break
+        end
         local message = self.input_channel:pop()
         if not message then
             break
