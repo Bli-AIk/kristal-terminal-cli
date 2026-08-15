@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Bli-AIk/kristal-terminal-cli/compare/v0.2.0...v0.2.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* guard input_channel nil when stop() fires mid-loop ([52269c8](https://github.com/Bli-AIk/kristal-terminal-cli/commit/52269c84bfbef83b11edff47f44482db933a95b6))
+
 ## [0.2.0](https://github.com/Bli-AIk/kristal-terminal-cli/compare/v0.1.0...v0.2.0) (2026-08-13)
 
 
