@@ -9,11 +9,11 @@
 
 ## Kristal Version Support
 
-| `kristal`                                                                                                                  | `kristal-terminal-cli` |
-| -------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`, 2026-06-23) | 0.1.0                  |
+| `kristal`                                                                                                                          | `kristal-terminal-cli` |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| [v0.11.0-dev](https://github.com/KristalTeam/Kristal/commit/f62afea63ccab02f468c24ac0d096bd8a2c9aa81) (`f62afea`, 2026-08-16) | 0.2.1                  |
 
-An optional Kristal v0.10.0 development library designed for **Linux** (and
+An optional Kristal v0.11.0-dev development library designed for **Linux** (and
 other POSIX) terminals, which attaches the game's debug console to the current
 process stdin/stdout.
 
@@ -44,6 +44,10 @@ Run the mod from the same terminal with `just run`, or use a project-specific
 terminal launcher for a detached console. The library is intended for local
 development and should be excluded from release packages when stdin/stdout are
 not available.
+
+If a terminal needs the engine to flush stdout immediately, pass Kristal's
+optional flag through with `just run -- --disable-stdout-buffer`. It is not
+required for normal use.
 
 ## Platform Support
 
