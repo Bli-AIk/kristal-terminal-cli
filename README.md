@@ -13,7 +13,7 @@
 | -------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`, 2026-06-23) | 0.1.0                  |
 
-一个为 **Linux**（及其他 POSIX）终端设计的可选 Kristal v0.10.0 开发库，把游戏内的调试控制台挂到当前进程的 stdin/stdout 上。
+一个为 **Linux**（及其他 POSIX）与 **Windows** 终端设计的可选 Kristal 开发库，把游戏内的调试控制台挂到当前进程的 stdin/stdout 上。
 
 ## 安装
 
@@ -39,6 +39,8 @@ git submodule update --init --recursive
 ```
 
 在同一个终端里用 `just run` 运行 mod，或用项目自带的终端启动脚本开启独立控制台。本库面向本地开发，打包发布时应排除（没有 stdin/stdout 的环境下不可用）。
+
+若某个终端需要引擎立即刷新 stdout，可选地把 Kristal 参数透传过去：`just run -- --disable-stdout-buffer`。这不是本库的必需启动参数，通常无需添加。
 
 ## 平台支持
 
