@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2](https://github.com/Bli-AIk/kristal-terminal-cli/compare/v0.2.1...v0.2.2) (2026-08-18)
+
+
+### chore
+
+* force release 0.2.2 ([f0e6003](https://github.com/Bli-AIk/kristal-terminal-cli/commit/f0e6003e515c69ec4b8c2df4272a47f4e221df6c))
+
+
+### Features
+
+* support Kristal 0.11.0-dev ([d4370be](https://github.com/Bli-AIk/kristal-terminal-cli/commit/d4370bea7d5c0a08165f5fd0820172d0182ece6d))
+
 ## [0.2.1](https://github.com/Bli-AIk/kristal-terminal-cli/compare/v0.2.0...v0.2.1) (2026-08-14)
 
 
