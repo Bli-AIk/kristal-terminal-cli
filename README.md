@@ -9,10 +9,10 @@
 
 ## Kristal 版本支持
 
-| `kristal`                                                                                                                    | `kristal-terminal-cli` |
-| -------------------------------------------------------------------------------------------------------------------------------| ----- |
-| [v0.11.0-dev](https://github.com/KristalTeam/Kristal/commit/f62afea63ccab02f468c24ac0d096bd8a2c9aa81) (`f62afea`, 2026-08-16) | 0.2.2 |
-| [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`, 2026-06-23)    | 0.1.0 – 0.2.1 |
+| `kristal`                                                                                                                     | `kristal-terminal-cli` |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| [v0.11.0-dev](https://github.com/KristalTeam/Kristal/commit/f62afea63ccab02f468c24ac0d096bd8a2c9aa81) (`f62afea`, 2026-08-16) | 0.2.2                  |
+| [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`, 2026-06-23)    | 0.1.0 – 0.2.1          |
 
 一个为 **Linux**（及其他 POSIX）与 **Windows** 终端设计的可选 Kristal 开发库，把游戏内的调试控制台挂到当前进程的 stdin/stdout 上。
 
