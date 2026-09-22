@@ -41,6 +41,115 @@ end
 
 lib.localize = localize
 
+local ANSI_RESET = "\27[0m"
+
+-- Fallback for the engine's named console colors, for when the engine's global
+-- COLORS table is not around (the headless unit tests). Values mirror
+-- src/engine/vars.lua.
+local FALLBACK_COLORS = {
+    aqua = { 0, 1, 1, 1 },
+    black = { 0, 0, 0, 1 },
+    blue = { 0, 0, 1, 1 },
+    dkgray = { 0.25, 0.25, 0.25, 1 },
+    fuchsia = { 1, 0, 1, 1 },
+    gray = { 0.5, 0.5, 0.5, 1 },
+    green = { 0, 0.5, 0, 1 },
+    lime = { 0, 1, 0, 1 },
+    ltgray = { 0.75, 0.75, 0.75, 1 },
+    maroon = { 0.5, 0, 0, 1 },
+    navy = { 0, 0, 0.5, 1 },
+    olive = { 0.5, 0.5, 0, 1 },
+    orange = { 1, 0.625, 0.25, 1 },
+    purple = { 0.5, 0, 0.5, 1 },
+    red = { 1, 0, 0, 1 },
+    silver = { 0.75, 0.75, 0.75, 1 },
+    teal = { 0, 0.5, 0.5, 1 },
+    white = { 1, 1, 1, 1 },
+    yellow = { 1, 1, 0, 1 },
+}
+
+-- COLORS is an engine global, so it may only be touched once the engine is up;
+-- keeping this a lookup rather than a cached table also keeps module loading
+-- safe under the engine-less unit tests.
+local function named_color(name)
+    if name == "cyan" then
+        -- The engine palette has no "cyan"; this is the value kristal-i18n
+        -- resolves the name to.
+        return { 0.5, 1, 1, 1 }
+    end
+
+    local hex = name:match("^#(%x%x%x%x%x%x)$")
+    if hex then
+        return {
+            tonumber(hex:sub(1, 2), 16) / 255,
+            tonumber(hex:sub(3, 4), 16) / 255,
+            tonumber(hex:sub(5, 6), 16) / 255,
+            1,
+        }
+    end
+
+    local colors = rawget(_G, "COLORS")
+    if colors and name ~= "reset" and colors[name] then
+        return colors[name]
+    end
+
+    if name == "reset" then
+        return FALLBACK_COLORS.white
+    end
+    return FALLBACK_COLORS[name] or FALLBACK_COLORS.white
+end
+
+local function channel(value)
+    local scaled = math.floor((tonumber(value) or 1) * 255 + 0.5)
+    if scaled < 0 then
+        return 0
+    end
+    if scaled > 255 then
+        return 255
+    end
+    return scaled
+end
+
+-- Enough of the engine's RGB color tables for the terminal to show them.
+-- Alpha has no SGR equivalent and is dropped.
+local function color_to_ansi(color)
+    return "\27[38;2;" .. channel(color[1]) .. ";" .. channel(color[2]) .. ";" .. channel(color[3]) .. "m"
+end
+
+-- The engine's console takes [color:name] markup only in translations; the
+-- TUI writes raw scrollback lines, so turn the markup into escape sequences
+-- rather than deleting the color (which is what it used to do).
+local function markup_to_ansi(text)
+    text = tostring(text)
+    text = text:gsub("%[color:([^%]]*)%]", function(name)
+        return color_to_ansi(named_color(name))
+    end)
+    text = text:gsub("%[nomods%]", "")
+    return text
+end
+
+-- Engine console lines arrive either as markup strings or as the console
+-- history's segment array ({"text", {r,g,b,a}, "text", ...}) where a table
+-- switches the color from that point on (src/engine/game/console.lua).
+local function value_to_ansi(value)
+    if value == nil then
+        return ""
+    end
+    if type(value) ~= "table" then
+        return markup_to_ansi(value)
+    end
+
+    local parts = {}
+    for _, part in ipairs(value) do
+        if type(part) == "table" then
+            parts[#parts + 1] = color_to_ansi(part)
+        else
+            parts[#parts + 1] = tostring(part)
+        end
+    end
+    return table.concat(parts)
+end
+
 local function strip_console_modifiers(text)
     text = tostring(text)
     text = text:gsub("%[color:[^%]]*%]", "")
@@ -59,6 +168,35 @@ local function console_value_to_text(value)
         end
     end
     return table.concat(parts)
+end
+
+-- Respects the engine's color support detection (which honors NO_COLOR), so a
+-- dumb terminal or a redirected stdout keeps getting plain text.
+local function colors_enabled()
+    if Logging and Logging.getColorSupport then
+        return Logging.getColorSupport()
+    end
+    return true
+end
+
+-- Renders one engine console value for this output, and closes the color off
+-- at every line boundary so it cannot bleed into the following line or into
+-- the TUI's input row. Text that carries no escapes is returned untouched.
+local function render_console_text(value)
+    if not colors_enabled() then
+        return strip_console_modifiers(console_value_to_text(value))
+    end
+
+    local text = value_to_ansi(value)
+    if not text:find("\27", 1, true) then
+        return text
+    end
+
+    text = text:gsub("\n", ANSI_RESET .. "\n")
+    if text:sub(-1) ~= "\n" then
+        text = text .. ANSI_RESET
+    end
+    return text
 end
 
 local function make_session_id()
@@ -85,7 +223,7 @@ function lib:write_raw(text)
 end
 
 function lib:write_line(text)
-    text = strip_console_modifiers(text)
+    text = render_console_text(text)
     if text:sub(-1) ~= "\n" then
         text = text .. "\n"
     end
@@ -111,7 +249,9 @@ function lib:write_console_text(text)
     if text == nil then
         return
     end
-    self:append_output(console_value_to_text(text))
+    -- append_output renders whichever shape this arrives in (markup string or
+    -- segment array) for the output mode that is currently active.
+    self:append_output(text)
 end
 
 local function split_lines(text)
@@ -123,9 +263,8 @@ local function split_lines(text)
 end
 
 function lib:append_output(text)
-    text = strip_console_modifiers(text)
     if self.raw_mode then
-        for _, line in ipairs(split_lines(text)) do
+        for _, line in ipairs(split_lines(render_console_text(text))) do
             table.insert(self.scrollback, line)
         end
         while #self.scrollback > SCROLLBACK_MAX do
@@ -416,6 +555,12 @@ function lib:init()
     if not io or not io.stdin or not io.stdout then
         print("[WARNING] terminal-cli requires standard input and output")
         return
+    end
+
+    -- Announced through the engine's "System" logger; kristal-i18n keys off
+    -- this exact English wording to translate it (see its localizeConsoleSegments).
+    if Logging and Logging.info then
+        Logging.info("Enabled library " .. self.info.id .. ".")
     end
 
     -- Load sub-modules (single responsibility per file).
