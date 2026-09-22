@@ -15,6 +15,32 @@ local function config(key)
     return Kristal.getLibConfig(LIB_ID, key)
 end
 
+-- Selective localization: only when kristal-i18n is loaded -- it registers
+-- itself in Mod.libs and installs Game:loc / Game:hasStr, and it merges
+-- lang/<language>.json from every loaded library (which is why this library
+-- ships lang/en.json and lang/zh_hans.json). Without i18n, or without the key,
+-- the built-in English text below is used unchanged.
+local function i18n_available()
+    return Mod ~= nil
+        and type(Mod.libs) == "table"
+        and Mod.libs["kristalI18n"] ~= nil
+        and Game ~= nil
+        and type(Game.loc) == "function"
+        and type(Game.hasStr) == "function"
+end
+
+local function localize(id, fallback, vars)
+    if i18n_available() and Game:hasStr(id) then
+        local ok, text = pcall(Game.loc, Game, id, vars)
+        if ok and type(text) == "string" then
+            return text
+        end
+    end
+    return fallback
+end
+
+lib.localize = localize
+
 local function strip_console_modifiers(text)
     text = tostring(text)
     text = text:gsub("%[color:[^%]]*%]", "")
@@ -64,6 +90,14 @@ function lib:write_line(text)
         text = text .. "\n"
     end
     return self:write_raw(text)
+end
+
+function lib:startup_banner()
+    return "\n"
+        .. localize("terminal_cli_banner_attached", "[terminal-cli] Interactive debug console attached.")
+        .. "\n"
+        .. localize("terminal_cli_banner_main_thread", "[terminal-cli] Lua commands run in the game's main thread.")
+        .. "\n"
 end
 
 function lib:write_prompt()
@@ -255,8 +289,6 @@ function lib:start()
     self.history = {}
     self.buffer = ""
     self.cursor = 0
-    self.startup_banner = "\n[terminal-cli] Interactive debug console attached.\n"
-        .. "[terminal-cli] Lua commands run in the game's main thread.\n"
 
     local start_ok, start_error = pcall(
         self.thread.start,
@@ -330,7 +362,10 @@ function lib:process_input()
                 self.raw_mode = true
                 if not self:enable_windows_vt() then
                     self.raw_mode = false
-                    self:append_output("[terminal-cli] VT sequences unavailable; use Windows Terminal or Win10+ conhost.")
+                    self:append_output(localize(
+                        "terminal_cli_vt_unavailable",
+                        "[terminal-cli] VT sequences unavailable; use Windows Terminal or Win10+ conhost."
+                    ))
                     self:stop()
                 else
                     self:history_load()
@@ -339,16 +374,21 @@ function lib:process_input()
                             self:write_console_text(line)
                         end
                     end
-                    self:append_output(self.startup_banner)
+                    self:append_output(self:startup_banner())
                     self.dirty = true
                 end
             elseif message.kind == "plain" then
                 self.raw_mode = false
-                self:write_line(self.startup_banner)
+                self:write_line(self:startup_banner())
                 self:write_prompt()
             elseif message.kind == "status" then
                 self.input_closed = true
-                self:append_output("[terminal-cli] stdin " .. tostring(message.value) .. ".")
+                local status = tostring(message.value)
+                self:append_output(localize(
+                    "terminal_cli_stdin_status",
+                    "[terminal-cli] stdin " .. status .. ".",
+                    { value = status }
+                ))
                 self:stop()
                 break
             end

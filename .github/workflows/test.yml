@@ -17,4 +17,8 @@ jobs:
       - name: Install LuaJIT
         run: sudo apt-get update && sudo apt-get install -y luajit
       - name: Run tests
-        run: luajit tests/input_channel_nil.lua
+        run: |
+          for test in tests/*.lua; do
+            echo "== $test"
+            luajit "$test"
+          done

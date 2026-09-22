@@ -71,6 +71,23 @@ History is persisted to `terminal-cli-history.txt` in the LÖVE save directory.
 A real terminal (tty) is required; when stdin is a pipe or redirect, the
 library falls back to plain line-by-line input (backspace only).
 
+## Localization (optional)
+
+The TUI text ships in English and follows the current language when a
+localization library ([kristal-i18n](https://github.com/Bli-AIk/kristal-i18n))
+is loaded: i18n merges `lang/<language>.json` from every loaded library into
+its tables, which is why this library ships `lang/en.json` and
+`lang/zh_hans.json`. Without i18n (or when a key is missing) the built-in
+English is used, so the library still works standalone.
+
+Localized so far: the two startup banner lines, the VT-sequences-unavailable
+notice, and the stdin status / EOF messages. Startup `[WARNING]`/`[ERROR]`
+diagnostics stay in English (they target developers, and i18n's `Game:loc` may
+not be ready yet at that point).
+
+To translate, only edit the values in `lang/*.json`: keep the key names and the
+`[var:...]` placeholders untouched, and copy `lang/en.json` to add a language.
+
 ## License
 
 MIT or Apache-2.0, at your option.

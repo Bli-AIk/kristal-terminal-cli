@@ -54,6 +54,14 @@ git submodule update --init --recursive
 
 需要从真实终端（tty）启动；stdin 为管道/重定向时自动降级为逐行输入（仅退格）。
 
+## 本地化（可选）
+
+本库的 TUI 文案默认是英文。检测到本地化库（[kristal-i18n](https://github.com/Bli-AIk/kristal-i18n)）时自动跟随当前语言：i18n 会把每个已加载库的 `lang/<语言>.json` 合并进自己的表，本库因此在 `lang/` 里自带 `en.json` 与 `zh_hans.json`。没装 i18n，或对应 key 缺失时回退到内置英文，单独使用不受影响。
+
+已接入的文案：启动横幅两行、VT 序列不可用提示、stdin 状态与 EOF 提示。启动期的 `[WARNING]`/`[ERROR]` 诊断信息保持英文（面向开发者，且 i18n 的 `Game:loc` 此时可能尚未就绪）。
+
+翻译只需改 `lang/*.json` 的值：键名与 `[var:...]` 占位符不要动；新增语言时复制 `lang/en.json` 即可。
+
 ## 许可证
 
 MIT 或 Apache-2.0，任选其一。
