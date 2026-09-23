@@ -22,6 +22,19 @@ local function strip_console_modifiers(text)
     return text
 end
 
+local function console_value_to_text(value)
+    if type(value) ~= "table" then
+        return tostring(value or "")
+    end
+    local parts = {}
+    for _, part in ipairs(value) do
+        if type(part) == "string" then
+            parts[#parts + 1] = part
+        end
+    end
+    return table.concat(parts)
+end
+
 local function make_session_id()
     return string.format(
         "%d-%d",
@@ -64,7 +77,7 @@ function lib:write_console_text(text)
     if text == nil then
         return
     end
-    self:append_output(text)
+    self:append_output(console_value_to_text(text))
 end
 
 local function split_lines(text)
@@ -321,6 +334,11 @@ function lib:process_input()
                     self:stop()
                 else
                     self:history_load()
+                    if Kristal.Console and Kristal.Console.history then
+                        for _, line in ipairs(Kristal.Console.history) do
+                            self:write_console_text(line)
+                        end
+                    end
                     self:append_output(self.startup_banner)
                     self.dirty = true
                 end
