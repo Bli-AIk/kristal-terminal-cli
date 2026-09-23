@@ -114,7 +114,9 @@ return function(lib)
             return
         end
         local rows = self:terminal_rows() or 24
-        local parts = { "\27[2J\27[H" }
+        -- The clear leaves the previous frame's attributes in place; reset them
+        -- so a color that somehow outlived its line cannot tint the whole frame.
+        local parts = { "\27[2J\27[H\27[0m" }
         local start = math.max(1, #self.scrollback - rows + 3)
         for i = start, #self.scrollback do
             parts[#parts + 1] = self.scrollback[i]

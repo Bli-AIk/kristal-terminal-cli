@@ -1,0 +1,7 @@
+{
+ "terminal_cli_banner_attached": "[terminal-cli] Interactive debug console attached.",
+ "terminal_cli_banner_main_thread": "[terminal-cli] Lua commands run in the game's main thread.",
+ "terminal_cli_vt_unavailable": "[terminal-cli] VT sequences unavailable; use Windows Terminal or Win10+ conhost.",
+ "terminal_cli_stdin_status": "[terminal-cli] stdin [var:value].",
+ "terminal_cli_stdin_eof": "[terminal-cli] stdin eof."
+}

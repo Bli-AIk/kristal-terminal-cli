@@ -1,0 +1,7 @@
+{
+ "terminal_cli_banner_attached": "[terminal-cli] 交互式调试控制台已连接。",
+ "terminal_cli_banner_main_thread": "[terminal-cli] Lua 命令在游戏主线程中执行。",
+ "terminal_cli_vt_unavailable": "[terminal-cli] 当前终端不支持 VT 转义序列；请改用 Windows Terminal 或 Win10+ 的 conhost。",
+ "terminal_cli_stdin_status": "[terminal-cli] 标准输入：[var:value]。",
+ "terminal_cli_stdin_eof": "[terminal-cli] 标准输入已结束（EOF）。"
+}

@@ -156,7 +156,7 @@ return function(lib)
             self.history_pos = nil
         elseif value == "ctrl_d" then
             if #b == 0 then
-                self:append_output("[terminal-cli] stdin eof.")
+                self:append_output(self.localize("terminal_cli_stdin_eof", "[terminal-cli] stdin eof."))
                 self:stop()
                 return
             end

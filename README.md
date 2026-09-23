@@ -11,6 +11,7 @@
 
 | `kristal`                                                                                                                     | `kristal-terminal-cli` |
 | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| [v0.11.0-dev](https://github.com/KristalTeam/Kristal/commit/8e592d84065263138d4e92593f0a4ab780d93822) (`8e592d8`, 2026-09-21) |                        |
 | [v0.11.0-dev](https://github.com/KristalTeam/Kristal/commit/f62afea63ccab02f468c24ac0d096bd8a2c9aa81) (`f62afea`, 2026-08-16) | 0.2.2                  |
 | [v0.10.0](https://github.com/KristalTeam/Kristal/commit/752bc0688ba97ca8a256ba9125b7e05a1ca6edbd) (`752bc068`, 2026-06-23)    | 0.1.0 – 0.2.1          |
 
@@ -52,6 +53,14 @@ git submodule update --init --recursive
 内置分栏式终端控制台（TUI）：游戏输出显示在上方滚动区，输入行固定在底部，互不干扰。支持方向键移动光标、Home/End/Delete、↑↓ 历史记录、Ctrl+C 取消当前行、Ctrl+D 退出（空行时）、`clear()` 清屏、中文（UTF-8）输入。输入行和历史记录中的命令带基础 Lua 语法高亮（关键字/字符串/注释/数字）；命令无法识别时，命令和错误输出以淡红色显示。历史保存在 LÖVE 存档目录的 `terminal-cli-history.txt`。
 
 需要从真实终端（tty）启动；stdin 为管道/重定向时自动降级为逐行输入（仅退格）。
+
+## 本地化（可选）
+
+本库的 TUI 文案默认是英文。检测到本地化库（[kristal-i18n](https://github.com/Bli-AIk/kristal-i18n)）时自动跟随当前语言：i18n 会把每个已加载库的 `lang/<语言>.json` 合并进自己的表，本库因此在 `lang/` 里自带 `en.json` 与 `zh_hans.json`。没装 i18n，或对应 key 缺失时回退到内置英文，单独使用不受影响。
+
+已接入的文案：启动横幅两行、VT 序列不可用提示、stdin 状态与 EOF 提示。启动期的 `[WARNING]`/`[ERROR]` 诊断信息保持英文（面向开发者，且 i18n 的 `Game:loc` 此时可能尚未就绪）。
+
+翻译只需改 `lang/*.json` 的值：键名与 `[var:...]` 占位符不要动；新增语言时复制 `lang/en.json` 即可。
 
 ## 许可证
 
